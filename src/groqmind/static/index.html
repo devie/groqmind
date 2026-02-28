@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GroqMind — AI Assistant</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        .chat-message pre { position: relative; }
+        .copy-btn { position: absolute; top: 0.5rem; right: 0.5rem; }
+        .typing-indicator span { animation: blink 1.4s infinite both; }
+        .typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
+        .typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes blink { 0%,80%,100%{opacity:0} 40%{opacity:1} }
+        .chat-message img { max-width: 100%; }
+        .chat-message code { font-size: 0.875rem; }
+        .chat-message p { margin-bottom: 0.5rem; }
+        .chat-message ul, .chat-message ol { margin-left: 1.5rem; margin-bottom: 0.5rem; }
+    </style>
+</head>
+<body class="h-full bg-gray-950 text-gray-100 flex flex-col">
+    <!-- Header -->
+    <header class="border-b border-gray-800 px-4 py-3 flex items-center justify-between shrink-0">
+        <div class="flex items-center gap-3">
+            <h1 class="text-xl font-bold text-emerald-400">GroqMind</h1>
+            <span class="text-xs text-gray-500">AI Assistant</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <select id="persona" class="bg-gray-800 text-sm rounded px-2 py-1 border border-gray-700">
+                <option value="general">General</option>
+                <option value="coder">Code Helper</option>
+                <option value="business">Business Advisor</option>
+                <option value="bahasa">Bahasa Indonesia</option>
+            </select>
+            <select id="model" class="bg-gray-800 text-sm rounded px-2 py-1 border border-gray-700">
+                <option value="llama-3.1-8b-instant">Llama 3.1 8B (Fast)</option>
+                <option value="llama-3.3-70b-versatile">Llama 3.3 70B (Powerful)</option>
+            </select>
+            <button onclick="clearChat()" class="text-xs bg-gray-800 hover:bg-gray-700 px-3 py-1 rounded border border-gray-700">Clear</button>
+            <span id="tokenCount" class="text-xs text-gray-500">0 tokens</span>
+        </div>
+    </header>
+
+    <!-- Chat area -->
+    <div id="chatArea" class="flex-1 overflow-y-auto p-4 space-y-4">
+        <div class="text-center text-gray-500 mt-20">
+            <p class="text-4xl mb-4">&#x1F9E0;</p>
+            <p class="text-lg">How can I help you today?</p>
+            <p class="text-sm mt-2">Powered by Groq — ultra-fast AI inference</p>
+        </div>
+    </div>
+
+    <!-- Input -->
+    <div class="border-t border-gray-800 p-4 shrink-0">
+        <form id="chatForm" class="flex gap-3 max-w-4xl mx-auto">
+            <input id="msgInput" type="text" placeholder="Type your message..."
+                class="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 focus:outline-none focus:border-emerald-500"
+                autocomplete="off">
+            <button type="submit" id="sendBtn"
+                class="bg-emerald-600 hover:bg-emerald-500 px-6 py-3 rounded-lg font-medium transition-colors">
+                Send
+            </button>
+        </form>
+    </div>
+
+    <script>
+    let sessionId = null;
+
+    marked.setOptions({
+        highlight: (code, lang) => {
+            if (lang && hljs.getLanguage(lang)) {
+                return hljs.highlight(code, { language: lang }).value;
+            }
+            return hljs.highlightAuto(code).value;
+        },
+    });
+
+    function addMessage(role, content) {
+        const chatArea = document.getElementById('chatArea');
+        // Remove welcome message
+        if (chatArea.querySelector('.text-center')) {
+            chatArea.innerHTML = '';
+        }
+        const div = document.createElement('div');
+        div.className = `chat-message flex ${role === 'user' ? 'justify-end' : 'justify-start'}`;
+        const bubble = document.createElement('div');
+        bubble.className = role === 'user'
+            ? 'bg-emerald-700 rounded-2xl rounded-br-md px-4 py-2 max-w-2xl'
+            : 'bg-gray-800 rounded-2xl rounded-bl-md px-4 py-2 max-w-2xl';
+
+        if (role === 'user') {
+            bubble.textContent = content;
+        } else {
+            bubble.innerHTML = renderMarkdown(content);
+        }
+        div.appendChild(bubble);
+        chatArea.appendChild(div);
+        chatArea.scrollTop = chatArea.scrollHeight;
+        return bubble;
+    }
+
+    function renderMarkdown(text) {
+        let html = marked.parse(text);
+        // Add copy buttons to code blocks
+        html = html.replace(/<pre><code/g, '<pre><button class="copy-btn text-xs bg-gray-700 hover:bg-gray-600 px-2 py-1 rounded" onclick="copyCode(this)">Copy</button><code');
+        return html;
+    }
+
+    function copyCode(btn) {
+        const code = btn.nextElementSibling.textContent;
+        navigator.clipboard.writeText(code);
+        btn.textContent = 'Copied!';
+        setTimeout(() => btn.textContent = 'Copy', 1500);
+    }
+
+    function showTyping() {
+        const chatArea = document.getElementById('chatArea');
+        const div = document.createElement('div');
+        div.id = 'typing';
+        div.className = 'flex justify-start';
+        div.innerHTML = `<div class="bg-gray-800 rounded-2xl rounded-bl-md px-4 py-3 typing-indicator">
+            <span class="inline-block w-2 h-2 bg-gray-400 rounded-full mx-0.5"></span>
+            <span class="inline-block w-2 h-2 bg-gray-400 rounded-full mx-0.5"></span>
+            <span class="inline-block w-2 h-2 bg-gray-400 rounded-full mx-0.5"></span>
+        </div>`;
+        chatArea.appendChild(div);
+        chatArea.scrollTop = chatArea.scrollHeight;
+    }
+
+    function removeTyping() {
+        document.getElementById('typing')?.remove();
+    }
+
+    async function sendMessage(message) {
+        addMessage('user', message);
+        showTyping();
+        document.getElementById('sendBtn').disabled = true;
+
+        try {
+            const res = await fetch('/api/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    message,
+                    session_id: sessionId,
+                    persona: document.getElementById('persona').value,
+                    model: document.getElementById('model').value,
+                }),
+            });
+
+            removeTyping();
+            const bubble = addMessage('assistant', '');
+            let fullText = '';
+
+            const reader = res.body.getReader();
+            const decoder = new TextDecoder();
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                const text = decoder.decode(value);
+                const lines = text.split('\n');
+
+                for (const line of lines) {
+                    if (!line.startsWith('data: ')) continue;
+                    try {
+                        const data = JSON.parse(line.slice(6));
+                        if (data.token) {
+                            fullText += data.token;
+                            bubble.innerHTML = renderMarkdown(fullText);
+                            document.getElementById('chatArea').scrollTop = document.getElementById('chatArea').scrollHeight;
+                        }
+                        if (data.done) {
+                            sessionId = data.session_id;
+                            document.getElementById('tokenCount').textContent = `${data.tokens} tokens`;
+                        }
+                        if (data.error) {
+                            bubble.innerHTML = `<span class="text-red-400">Error: ${data.error}</span>`;
+                        }
+                    } catch {}
+                }
+            }
+        } catch (err) {
+            removeTyping();
+            addMessage('assistant', `Error: ${err.message}`);
+        }
+        document.getElementById('sendBtn').disabled = false;
+        document.getElementById('msgInput').focus();
+    }
+
+    async function clearChat() {
+        if (sessionId) {
+            await fetch(`/api/session/${sessionId}/clear`, { method: 'POST' });
+        }
+        sessionId = null;
+        document.getElementById('chatArea').innerHTML = `
+            <div class="text-center text-gray-500 mt-20">
+                <p class="text-4xl mb-4">&#x1F9E0;</p>
+                <p class="text-lg">How can I help you today?</p>
+                <p class="text-sm mt-2">Powered by Groq — ultra-fast AI inference</p>
+            </div>`;
+        document.getElementById('tokenCount').textContent = '0 tokens';
+    }
+
+    document.getElementById('chatForm').addEventListener('submit', (e) => {
+        e.preventDefault();
+        const input = document.getElementById('msgInput');
+        const msg = input.value.trim();
+        if (!msg) return;
+        input.value = '';
+        sendMessage(msg);
+    });
+    </script>
+</body>
+</html>
