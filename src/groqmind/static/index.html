@@ -7,7 +7,8 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked@15.0.7/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.2.4/dist/purify.min.js"></script>
     <style>
         .chat-message pre { position: relative; }
         .copy-btn { position: absolute; top: 0.5rem; right: 0.5rem; }
@@ -103,7 +104,10 @@
     }
 
     function renderMarkdown(text) {
-        let html = marked.parse(text);
+        let html = DOMPurify.sanitize(marked.parse(text), {
+            ADD_TAGS: ['button'],
+            ADD_ATTR: ['onclick'],
+        });
         // Add copy buttons to code blocks
         html = html.replace(/<pre><code/g, '<pre><button class="copy-btn text-xs bg-gray-700 hover:bg-gray-600 px-2 py-1 rounded" onclick="copyCode(this)">Copy</button><code');
         return html;
@@ -179,7 +183,8 @@
                             document.getElementById('tokenCount').textContent = `${data.tokens} tokens`;
                         }
                         if (data.error) {
-                            bubble.innerHTML = `<span class="text-red-400">Error: ${data.error}</span>`;
+                            bubble.textContent = `Error: ${data.error}`;
+                            bubble.classList.add('text-red-400');
                         }
                     } catch {}
                 }
