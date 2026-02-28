@@ -20,7 +20,7 @@ client = Groq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
 
 class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=10000)
-    session_id: str | None = Field(None, pattern=r"^[a-f0-9]{12,32}$")
+    session_id: str | None = None
     persona: str = "general"
     model: str = "llama-3.1-8b-instant"
 
